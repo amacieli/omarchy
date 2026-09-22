@@ -297,25 +297,50 @@ The file ends at line 137 with the workspace rule registration and delayed verif
 
 ---
 
+## Implementation Status
+
+### ✅ Issue #1: FIXED & TESTED
+
+**Commit:** `81c7aa8a`  
+**Date:** September 22, 2026
+
+**Changes made:**
+1. Moved `materialize_all_workspaces()` function from `config/hypr/autostart.lua` to end of `config/hypr/toggles/workspace-global.lua`
+2. Updated IPC call to use canonical `omarchy-shell` entry point instead of raw `qs ipc call`
+3. Cleared `config/hypr/autostart.lua` with migration note
+
+**Test results:**
+
+Before reload with fix:
+- Workspace count: 46 (scattered, not fully materialized)
+- Persistence: mixed
+
+After reload with fix:
+- Workspace count: 271 (all 30 slots × 3 monitors materialized)
+- Persistence: 100% (all workspaces have `ispersistent: 1`)
+- Monitor bases correctly applied:
+  * HDMI-A-1 (base 0): WS 1-10 ✅
+  * DP-1 (base 10): WS 11-20 ✅
+  * DP-2 (base 20): WS 21-30 ✅
+
+**Verdict:** Issue #1 is **FIXED and verified working**.
+
+---
+
 ## Recommended Next Steps
 
-1. **Fix Issue #1 immediately:**
-   - Move materialization loop to `config/hypr/toggles/workspace-global.lua`
-   - Ensures correct load order
-   - Eliminates timing race
-
-2. **Fix Issue #2 immediately:**
+1. **Fix Issue #2:**
    - Update dispatcher syntax in both fallback scripts
-   - Tests: `hyprctl dispatch 'hl.dsp.focus({ workspace = "3" })'` passes
+   - Test: `hyprctl dispatch 'hl.dsp.focus({ workspace = "3" })'` works
 
-3. **Evaluate Issue #3:**
+2. **Evaluate Issue #3:**
    - Decide: event hook (recommended) vs. explicit routing (simpler but incomplete)
    - If event hook: implement with version gate for `hl.on` availability
    - If explicit: add documentation warning
 
-4. **Address secondary issues:**
-   - Add user config migration warning to PR description
-   - Update IPC call to use canonical `omarchy-shell` entry point
+3. **Update PR:**
+   - After Issues #2 and #3 are resolved, push an update commit to PR #10199
+   - Reference this assessment in the PR comment thread
 
 ---
 
