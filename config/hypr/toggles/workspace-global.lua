@@ -135,3 +135,33 @@ local ok = pcall(function()
   os.execute("omarchy-ensure-workspaces &")
 end)
 -- Silently ignore if the script isn't found yet
+
+-- ── Workspace materialization (Issue #1) ────────────────────────────────────
+-- Force-create all workspace slots 1-30 at config load time by focusing each one.
+-- Hyprland materializes workspaces on focus; this ensures they exist for later
+-- switches. This MUST happen here (after monitor bases are loaded and workspace
+-- rules are registered) so that we know which workspaces to create.
+--
+-- NOTE: config/hypr/autostart.lua was the original location, but it runs BEFORE
+-- the toggles file is loaded, so _G.omarchy_monitor_bases was nil there (Issue #1).
+-- Moving it here ensures we run after the bases are set.
+local function materialize_all_workspaces()
+  -- Create workspaces 1-30 by focusing them (Hyprland materializes on focus)
+  for ws = 1, 30 do
+    local ok = pcall(function()
+      hl.dispatch(hl.dsp.focus({ workspace = tostring(ws) }))
+    end)
+    -- No yield/sleep here — must complete in one config pass
+  end
+  -- Return focus to ws 1
+  pcall(function()
+    hl.dispatch(hl.dsp.focus({ workspace = "1" }))
+  end)
+end
+
+-- Materialize all workspaces now that bases and rules are set up.
+materialize_all_workspaces()
+
+-- Refresh bars after materialization (backgrounded).
+-- Use canonical IPC entry point: omarchy-shell (per shell-dev.md)
+os.execute("sleep 0.1; omarchy-shell 'omarchy-bar-refresh' &>/dev/null &")
