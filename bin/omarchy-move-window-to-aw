@@ -24,5 +24,7 @@ GLOBAL_FLAG="$HOME/.local/state/omarchy/toggles/hypr/workspace-global.lua"
 if [[ -f "$GLOBAL_FLAG" ]]; then
   exec omarchy-hyprland-workspace-global-move-window "$SLOT"
 else
-  exec hyprctl dispatch movetoworkspacesilent "$SLOT"
+  # Use Lua dispatcher form (0.56.2+ required string form to be valid Lua)
+  # follow=false keeps window moves silent (no focus change to the moved window)
+  exec hyprctl dispatch "hl.dsp.window.move({ workspace = \"$SLOT\", follow = false })"
 fi

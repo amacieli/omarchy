@@ -21,5 +21,6 @@ GLOBAL_FLAG="$HOME/.local/state/omarchy/toggles/hypr/workspace-global.lua"
 if [[ -f "$GLOBAL_FLAG" ]]; then
   exec omarchy-hyprland-workspace-global-switch "$SLOT"
 else
-  exec hyprctl dispatch workspace "$SLOT"
+  # Use Lua dispatcher form (0.56.2+ required string form to be valid Lua)
+  exec hyprctl dispatch "hl.dsp.focus({ workspace = \"$SLOT\" })"
 fi
