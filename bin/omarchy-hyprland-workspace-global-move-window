@@ -1,0 +1,65 @@
+#!/bin/bash
+# omarchy-hyprland-workspace-global-move-window <slot 1-10>
+#
+# Move the focused window to slot N in global workspace mode.
+#
+# Reads the active window's monitor name, looks up its stable base in
+# ~/.local/state/omarchy/monitor-bases.json, then silently moves the window to
+# workspace (base+N) on that monitor.
+#
+# "Silent" means the display does not follow the window. The user presses
+# SUPER+N (which calls omarchy-switch-to-aw N) to follow.
+#
+# This is called by omarchy-move-window-to-aw when workspace-global.lua flag is active.
+
+SLOT="${1:-}"
+if [[ -z "$SLOT" || ! "$SLOT" =~ ^([1-9]|10)$ ]]; then
+  echo "Usage: $0 <slot 1-10>" >&2
+  exit 1
+fi
+
+BASES_FILE="$HOME/.local/state/omarchy/monitor-bases.json"
+
+# Get the focused window's monitor name via hyprctl
+FOCUSED_MONITOR=$(hyprctl activewindow -j 2>/dev/null | python3 -c "
+import json, sys
+try:
+    w = json.load(sys.stdin)
+    print(w.get('monitor', ''))
+except Exception:
+    print('')
+" 2>/dev/null)
+
+if [[ -z "$FOCUSED_MONITOR" ]]; then
+  # No focused window or can't determine monitor — fall back to raw slot move
+  exec hyprctl dispatch "hl.dsp.window.move({ workspace = \"$SLOT\", follow = false })"
+fi
+
+if [[ ! -f "$BASES_FILE" ]]; then
+  # No bases file — fall back to raw slot move
+  exec hyprctl dispatch "hl.dsp.window.move({ workspace = \"$SLOT\", follow = false })"
+fi
+
+# Look up the base for this monitor and compute target workspace
+TARGET_WS=$(python3 - "$BASES_FILE" "$FOCUSED_MONITOR" "$SLOT" <<'PYEOF'
+import json, sys
+bases_file, monitor_name, slot = sys.argv[1], sys.argv[2], int(sys.argv[3])
+try:
+    with open(bases_file) as f:
+        bases = json.load(f)
+    base = bases.get(monitor_name)
+    if base is None:
+        sys.exit(1)
+    print(base + slot)
+except Exception:
+    sys.exit(1)
+PYEOF
+)
+
+if [[ $? -ne 0 || -z "$TARGET_WS" ]]; then
+  # Monitor not in bases map — fall back to raw slot move
+  exec hyprctl dispatch "hl.dsp.window.move({ workspace = \"$SLOT\", follow = false })"
+fi
+
+# Move the focused window to the computed global workspace, silently
+exec hyprctl dispatch "hl.dsp.window.move({ workspace = \"$TARGET_WS\", follow = false })"

@@ -1,0 +1,56 @@
+#!/bin/bash
+# omarchy-hyprland-workspace-global-switch <slot 1-10>
+#
+# Switch ALL connected monitors to the given slot in global workspace mode.
+#
+# Reads stable monitor bases from ~/.local/state/omarchy/monitor-bases.json
+# (keyed by monitor *name*, not transient Hyprland id — see hyprwm/Hyprland#2601).
+#
+# For slot N, dispatches:
+#   hyprctl dispatch hl.dsp.focus({ workspace = "<base+N>" })
+# for each monitor's workspace (base+N), switching all monitors simultaneously.
+#
+# This is called by omarchy-switch-to-aw when workspace-global.lua flag is active.
+# The event hook in workspace-global.lua will then confirm all monitors are synced.
+
+SLOT="${1:-}"
+if [[ -z "$SLOT" || ! "$SLOT" =~ ^([1-9]|10)$ ]]; then
+  echo "Usage: $0 <slot 1-10>" >&2
+  exit 1
+fi
+
+BASES_FILE="$HOME/.local/state/omarchy/monitor-bases.json"
+
+if [[ ! -f "$BASES_FILE" ]]; then
+  echo "omarchy-hyprland-workspace-global-switch: monitor-bases.json not found; run omarchy-monitor-base sync first" >&2
+  # Fallback: focus raw slot (local behavior)
+  exec hyprctl dispatch "hl.dsp.focus({ workspace = \"$SLOT\" })"
+fi
+
+# Read all monitor bases and dispatch each monitor to its slot
+python3 - "$BASES_FILE" "$SLOT" <<'PYEOF'
+import json, sys, subprocess
+
+bases_file, slot = sys.argv[1], int(sys.argv[2])
+
+with open(bases_file) as f:
+    bases = json.load(f)
+
+if not bases:
+    # No bases — fall back to raw slot
+    subprocess.run(["hyprctl", "dispatch", f'hl.dsp.focus({{ workspace = "{slot}" }})'])
+    sys.exit(0)
+
+# Dispatch focus to slot N on every known monitor
+errors = 0
+for name, base in sorted(bases.items(), key=lambda x: x[1]):
+    target_ws = base + slot
+    result = subprocess.run(
+        ["hyprctl", "dispatch", f'hl.dsp.focus({{ workspace = "{target_ws}" }})'],
+        capture_output=True
+    )
+    if result.returncode != 0:
+        errors += 1
+
+sys.exit(0 if errors == 0 else 1)
+PYEOF
