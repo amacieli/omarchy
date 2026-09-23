@@ -165,3 +165,78 @@ materialize_all_workspaces()
 -- Refresh bars after materialization (backgrounded).
 -- Use canonical IPC entry point: omarchy-shell (per shell-dev.md)
 os.execute("sleep 0.1; omarchy-shell 'omarchy-bar-refresh' &>/dev/null &")
+
+-- ── Sync all monitors when any monitor's workspace changes (Issue #3) ────────
+-- This event catches ALL workspace switches, regardless of source (helpers,
+-- menus, hooks, raw dispatches, other tools). When a workspace becomes active
+-- on any monitor, we check if it's a global-mode slot and sync all other
+-- monitors to the same slot.
+--
+-- This is safe from re-entrancy: we only dispatch on screens showing the
+-- WRONG workspace, so each pass strictly reduces mismatches. Convergence
+-- happens in one round (monotonic, never ping-pongs).
+--
+-- It requires hl.on("workspace.active", ...), which is only available in
+-- newer Hyprland versions. Gate it to avoid errors on older versions.
+if hl.on then
+  local function slot_of(ws_id)
+    -- Given a raw Hyprland workspace ID, extract the slot (1-10) if it's
+    -- within any monitor's range. Return nil for special/named/out-of-range ids.
+    if ws_id <= 0 or ws_id > 99 then
+      return nil  -- Special workspace or out of range
+    end
+    -- slot = ws_id % 10, but 0 → 10 (slots are 1-10, not 0-9)
+    local slot = ws_id % 10
+    if slot == 0 then slot = 10 end
+    return slot
+  end
+
+  local function switch_to_slot(slot)
+    -- Dispatch all monitors to their slot-N workspace, respecting the
+    -- name-keyed stable bases. Only dispatch on monitors showing the wrong
+    -- workspace to avoid unnecessary re-entrancy.
+    local monitors = hl.get_monitors()
+    if not monitors then return end
+    
+    -- Collect monitors that need syncing (not already on target slot)
+    local to_sync = {}
+    for i = 1, #_G.omarchy_global_ws_monitors do
+      local mon = _G.omarchy_global_ws_monitors[i]
+      local target_ws = mon.base + slot
+      
+      -- Find current workspace on this monitor
+      local current_ws = nil
+      for j = 1, #monitors do
+        if monitors[j].id == mon.id and monitors[j].active_workspace then
+          current_ws = monitors[j].active_workspace.id
+          break
+        end
+      end
+      
+      -- Only add to sync if this monitor is showing a different workspace
+      if current_ws ~= target_ws then
+        table.insert(to_sync, { monitor_id = mon.id, target_ws = target_ws, mon_name = mon.name })
+      end
+    end
+    
+    -- Execute syncs. For each monitor:
+    -- 1. Focus the workspace (Lua form, no string syntax)
+    -- 2. Dispatch via omarchy-shell to ensure proper ordering
+    for k = 1, #to_sync do
+      local sync = to_sync[k]
+      pcall(function()
+        -- Use Lua dispatcher (fixed in Issue #2)
+        hl.dispatch(hl.dsp.focus({ workspace = tostring(sync.target_ws) }))
+      end)
+    end
+  end
+
+  hl.on("workspace.active", function(workspace)
+    local slot = slot_of(workspace.id)
+    if not slot then return end
+    
+    -- Sync all other monitors to this slot
+    -- This runs whenever ANY workspace becomes active
+    switch_to_slot(slot)
+  end)
+end
