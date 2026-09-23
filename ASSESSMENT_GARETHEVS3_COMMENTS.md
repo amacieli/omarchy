@@ -327,19 +327,41 @@ After reload with fix:
 
 ---
 
+### ✅ Issue #2: FIXED & TESTED
+
+**Commit:** `52980094`  
+**Date:** September 22, 2026
+
+**Changes made:**
+1. Updated `bin/omarchy-switch-to-aw` line 24 to use Lua dispatcher form
+2. Updated `bin/omarchy-move-window-to-aw` line 27 to use Lua dispatcher form with `follow = false`
+
+**Test results:**
+
+Before fix:
+- Old syntax rejects with: `error: [string "return hl.dispatch(workspace 3)"]:1: ')' expected near '3'`
+- Both scripts fail silently when global mode is OFF
+
+After fix:
+- New syntax accepted: `hyprctl dispatch 'hl.dsp.focus({ workspace = "3" })'` → ok ✅
+- New syntax accepted: `hyprctl dispatch 'hl.dsp.window.move({ workspace = "3", follow = false })'` → ok ✅
+- Both scripts execute successfully in local mode
+
+**Verdict:** Issue #2 is **FIXED and verified working**.
+
+---
+
+---
+
 ## Recommended Next Steps
 
-1. **Fix Issue #2:**
-   - Update dispatcher syntax in both fallback scripts
-   - Test: `hyprctl dispatch 'hl.dsp.focus({ workspace = "3" })'` works
-
-2. **Evaluate Issue #3:**
+1. **Evaluate Issue #3:**
    - Decide: event hook (recommended) vs. explicit routing (simpler but incomplete)
    - If event hook: implement with version gate for `hl.on` availability
    - If explicit: add documentation warning
 
-3. **Update PR:**
-   - After Issues #2 and #3 are resolved, push an update commit to PR #10199
+2. **Update PR:**
+   - After Issue #3 is resolved, push an update commit to PR #10199
    - Reference this assessment in the PR comment thread
 
 ---
