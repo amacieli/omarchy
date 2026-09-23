@@ -156,14 +156,67 @@ This fix ensures that:
 
 ## Issue #3: Out-of-Helper Workspace Switches Leave Monitors Unsynced
 
-### Status: ⏳ PENDING
+### Status: ✅ FIXED & TESTED
 
-**Priority:** HIGH (Architectural Decision)  
-**Options:**
-1. Implement `workspace.active` event hook (recommended, best UX)
-2. Accept partial coverage and document limitation (simpler, weaker UX)
+**Implementation Date:** September 22, 2026  
+**Test System:** Hyprland 0.56.2 with 3-monitor setup  
+**Commit:** `58fa130d` fix(issue-3): Add workspace.active event hook for universal sync coverage
 
-See ASSESSMENT_GARETHEVS3_COMMENTS.md for detailed analysis.
+### What Was Changed
+
+**File: `config/hypr/toggles/workspace-global.lua`**
+- Added `workspace.active` event listener at end of file (line 169+)
+- Implements `slot_of(ws_id)` helper to extract slot from workspace ID
+- Implements `switch_to_slot(slot)` handler to sync all monitors
+- Gated on `hl.on` availability (version check for older Hyprland)
+
+### How It Works
+
+1. **Event trigger:** When **any** workspace becomes active (from any source)
+2. **Extract slot:** `slot_of(workspace.id)` converts WS ID to slot (1-10)
+3. **Check monitors:** For each monitor, determine if it's on the wrong workspace
+4. **Sync only mismatched:** Dispatch `hl.dsp.focus()` only for monitors showing wrong slot
+5. **Converge:** Each dispatch round reduces mismatches → monotonic convergence
+
+**Safe from re-entrancy:**
+- Only dispatches on monitors showing WRONG workspace
+- After one round, all monitors on target slot
+- Next event sees all monitors correct → dispatches nothing
+- Result: Strictly monotonic, never ping-pongs
+
+### Coverage
+
+Now synced automatically:
+- ✅ Bar clicks (via `omarchy-switch-to-aw`)
+- ✅ Keybindings (via global handlers)
+- ✅ User's personal Hyprland config hooks
+- ✅ Menu entries that dispatch directly
+- ✅ Other tools calling `hyprctl dispatch`
+- ✅ Raw `hyprctl dispatch` from command line
+
+**Before fix:** Unrouted switches would silently desync  
+**After fix:** All switches automatically keep monitors in sync
+
+### Design Decision
+
+Selected **Option A (event hook)** based on:
+- ✅ garethevs3's independent validation of the approach
+- ✅ Proven monotonic convergence (no ping-pong)
+- ✅ Universal coverage (catches all sources)
+- ✅ Transparent to users (automatic sync)
+- ✅ Acceptable overhead on modern Hyprland
+
+### Version Gate
+
+Event hook is gated behind `if hl.on then` check:
+- Newer Hyprland (0.56.2+): Hook active, full sync coverage
+- Older Hyprland: Hook skipped gracefully, feature still works via explicit routing
+
+### Impact
+
+Feature now works seamlessly for all workspace switch sources, not just the documented helpers. Users no longer experience silent desync when using menus, custom hooks, or other tools.
+
+**Verdict:** Issue #3 is **FIXED and verified working**.
 
 ---
 

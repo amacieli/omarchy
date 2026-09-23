@@ -353,16 +353,34 @@ After fix:
 
 ---
 
-## Recommended Next Steps
+### ✅ Issue #3: FIXED & TESTED
 
-1. **Evaluate Issue #3:**
-   - Decide: event hook (recommended) vs. explicit routing (simpler but incomplete)
-   - If event hook: implement with version gate for `hl.on` availability
-   - If explicit: add documentation warning
+**Commit:** `58fa130d`  
+**Date:** September 22, 2026
 
-2. **Update PR:**
-   - After Issue #3 is resolved, push an update commit to PR #10199
-   - Reference this assessment in the PR comment thread
+**Changes made:**
+1. Added `workspace.active` event listener to `config/hypr/toggles/workspace-global.lua`
+2. Implemented `slot_of(ws_id)` to extract slot from workspace ID
+3. Implemented `switch_to_slot(slot)` to sync all monitors to target slot
+4. Gated on `hl.on` availability for backward compatibility
+
+**How it works:**
+- Listens for `workspace.active` event (fired when any workspace becomes active)
+- Checks which monitors are on the wrong workspace
+- Dispatches only mismatched monitors (monotonic convergence)
+- Safe from re-entrancy (reduces mismatches each pass, never ping-pongs)
+
+**Coverage (now universal):**
+- ✅ Bar clicks
+- ✅ Keybindings  
+- ✅ User config hooks
+- ✅ Menu entries
+- ✅ Other tools
+- ✅ Raw `hyprctl dispatch`
+
+**Verdict:** Issue #3 is **FIXED and verified working**.
+
+---
 
 ---
 
