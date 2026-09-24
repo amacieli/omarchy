@@ -98,6 +98,67 @@ slot10_move=$(echo "$bindings_output" | grep '^MOVE|' | grep 'omarchy-move-windo
 [[ -n "$slot10_move" ]] || fail "slot 10 move binding present" "bindings: $bindings_output"
 pass "boundary slots 1 and 10 both have move bindings"
 
+# ── 1b. Binding inspection: SUPER+SHIFT+ALT+N must pass --silent ──────────────
+# The ALT+SHIFT variant (silent move, no follow) must include --silent in the
+# command so that local mode can distinguish it from the follow-move binding.
+# This catches the regression where both bindings called the wrapper identically.
+
+silent_output=$(OMARCHY_PATH="$ROOT" lua << 'LUA'
+package.path = os.getenv("OMARCHY_PATH") .. "/?.lua;" .. package.path
+
+local captured = {}
+o = setmetatable({}, {
+  __index = function(_, key) return function() end end
+})
+o.bind = function(keys, description, action, opts)
+  table.insert(captured, { keys = keys, description = description, action = action })
+end
+
+local function proxy()
+  return setmetatable({}, {
+    __index = function(self, k)
+      local v = proxy()
+      rawset(self, k, v)
+      return v
+    end,
+    __call = function() return {} end,
+  })
+end
+hl = proxy()
+
+require("default.hypr.bindings.tiling")
+
+for _, b in ipairs(captured) do
+  local keys = b.keys
+  local action = tostring(b.action)
+  -- SUPER+SHIFT+ALT+N: the silent move binding
+  if keys:match("^SUPER %+ SHIFT %+ ALT %+ code:1[0-9]$") then
+    print("SILENT_MOVE|" .. keys .. "|" .. action)
+  end
+  -- SUPER+SHIFT+N: the follow-move binding
+  if keys:match("^SUPER %+ SHIFT %+ code:1[0-9]$") then
+    print("FOLLOW_MOVE|" .. keys .. "|" .. action)
+  end
+end
+LUA
+)
+
+# SUPER+SHIFT+ALT+N must pass --silent to the move wrapper.
+while IFS='|' read -r tag keys action; do
+  [[ "$action" == *"--silent"* ]] ||
+    fail "SUPER+SHIFT+ALT+N passes --silent to omarchy-move-window-to-aw" \
+      "keys=$keys action=$action (missing --silent — local mode will silently move without it)"
+done < <(echo "$silent_output" | grep '^SILENT_MOVE|')
+pass "SUPER+SHIFT+ALT+N bindings all pass --silent to omarchy-move-window-to-aw"
+
+# SUPER+SHIFT+N must NOT pass --silent (it should follow the window).
+while IFS='|' read -r tag keys action; do
+  [[ "$action" != *"--silent"* ]] ||
+    fail "SUPER+SHIFT+N does NOT pass --silent (follow move should follow)" \
+      "keys=$keys action=$action (--silent should only appear on the ALT variant)"
+done < <(echo "$silent_output" | grep '^FOLLOW_MOVE|')
+pass "SUPER+SHIFT+N bindings do NOT pass --silent (follow move follows the window)"
+
 # ── 2. End-to-end routing ─────────────────────────────────────────────────────
 # Verify that omarchy-switch-to-aw and omarchy-move-window-to-aw (the targets
 # of the new bindings) correctly route to the global helper when the flag is set
@@ -157,3 +218,17 @@ output=$("$ROOT/bin/omarchy-move-window-to-aw" 5 2>/dev/null)
 [[ "$output" == *"hyprctl"* && "$output" != *"global-move"* ]] ||
   fail "local mode: SUPER+SHIFT+5 falls back to hyprctl" "got: $output"
 pass "local mode: omarchy-move-window-to-aw falls back to hyprctl"
+
+# Local mode: follow move (no --silent) must NOT include follow=false.
+# In Hyprland 0.56.2, moveToWorkspace without follow=false switches to the
+# target workspace alongside the window. With follow=false it stays silent.
+output=$("$ROOT/bin/omarchy-move-window-to-aw" 5 2>/dev/null)
+[[ "$output" != *"follow = false"* ]] ||
+  fail "local mode follow: SUPER+SHIFT+5 must NOT pass follow=false" "got: $output"
+pass "local mode: follow move (no --silent) omits follow=false — window and display move together"
+
+# Local mode: silent move (--silent flag) MUST include follow=false.
+output=$("$ROOT/bin/omarchy-move-window-to-aw" --silent 5 2>/dev/null)
+[[ "$output" == *"follow = false"* ]] ||
+  fail "local mode silent: SUPER+SHIFT+ALT+5 must pass follow=false" "got: $output"
+pass "local mode: silent move (--silent) passes follow=false — window moves, display stays"

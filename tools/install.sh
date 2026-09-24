@@ -1,9 +1,11 @@
 #!/bin/bash
-# install.sh — omarchy-global-workspaces
+# tools/install.sh — omarchy-global-workspaces
+#
+# Tester convenience script. NOT part of Omarchy's install or update path.
+# Run this to try out PR #12978 before it merges.
 #
 # Installs the global workspace switching feature onto a stock Omarchy setup.
-# This mirrors exactly what the PR (omacom/omarchy#12978 @ caff3e03) adds to
-# the main Omarchy tree, for users who want to test it before the PR merges.
+# This mirrors what the PR adds to the main Omarchy tree.
 #
 # Safe to re-run: all steps are idempotent.
 #
@@ -46,7 +48,7 @@
 
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ── Colour helpers ─────────────────────────────────────────────────────────────
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }

@@ -226,57 +226,58 @@ end
 -- so each pass strictly reduces mismatches and converges in one round.
 
 if hl.on then
-  -- Compute the upper bound for valid workspace IDs dynamically from the bases
-  -- map. The hardcoded 99 breaks when a tenth distinct monitor name is seen
-  -- (e.g. repeated HEADLESS-n names), because the allocator never caps bases
-  -- and the tenth monitor gets base 90, pushing some IDs above 99. Using
-  -- max_base + 10 (minimum 99) keeps the bound correct regardless of count.
-  local ws_id_upper_bound = 99
-  if _G.omarchy_monitor_bases then
-    for _, base in pairs(_G.omarchy_monitor_bases) do
-      local top = base + 10
-      if top > ws_id_upper_bound then ws_id_upper_bound = top end
-    end
-  end
-
   local function slot_of(ws_id)
     -- Extract slot 1-10 from any workspace ID within the global range.
     -- Returns nil for special/named/out-of-range IDs.
-    if ws_id <= 0 or ws_id > ws_id_upper_bound then return nil end
-    local slot = ws_id % 10
-    if slot == 0 then slot = 10 end
-    return slot
+    -- Reads _G.omarchy_monitor_bases dynamically so hotplugged monitors with
+    -- high bases (e.g. base=90 after monitor.added) are included without a
+    -- full config reload. The stale local ws_id_upper_bound variable is gone.
+    if ws_id <= 0 then return nil end
+    local bases = _G.omarchy_monitor_bases
+    if not bases then return nil end
+    for _, base in pairs(bases) do
+      if ws_id >= base + 1 and ws_id <= base + 10 then
+        local slot = ws_id % 10
+        if slot == 0 then slot = 10 end
+        return slot
+      end
+    end
+    return nil
   end
 
   local function switch_to_slot(slot)
     local monitors = hl.get_monitors()
     if not monitors then return end
 
-    -- Build a set of current active workspaces keyed by monitor id.
-    -- Also record which monitor currently has focus so we can dispatch it last:
-    -- hl.dsp.focus() warps keyboard focus and the pointer to the workspace's
-    -- owner monitor, so whichever monitor is dispatched last wins. Dispatching
-    -- the originating monitor last ensures focus stays where the user is.
+    -- Record the focused monitor name BEFORE any dispatches so we can
+    -- unconditionally refocus it afterwards. hl.dsp.focus({ workspace = N })
+    -- warps keyboard focus and the pointer to whichever monitor owns workspace N,
+    -- so every dispatch to another monitor steals focus. We must restore it
+    -- explicitly after all non-focused-monitor dispatches — including the case
+    -- where the originating monitor was already on the target slot (e.g.
+    -- SUPER+TAB/scroll) and therefore isn't in the "needs syncing" set.
+    local focused_monitor_name = nil
     local active_ws = {}
-    local focused_monitor_id = nil
     for i = 1, #monitors do
       local m = monitors[i]
       if m.active_workspace then
         active_ws[m.id] = m.active_workspace.id
       end
       if m.focused then
-        focused_monitor_id = m.id
+        focused_monitor_name = m.name
       end
     end
 
-    -- Partition: non-focused monitors that need syncing first, focused last.
+    -- Dispatch all monitors that need syncing, non-focused first.
+    -- The focused monitor is handled last (if it needs a change) or via an
+    -- explicit refocus call below (if it was already on the right slot).
     local others = {}
     local focused_entry = nil
     for i = 1, #_G.omarchy_global_ws_monitors do
       local mon = _G.omarchy_global_ws_monitors[i]
       local target_ws = mon.base + slot
       if active_ws[mon.id] ~= target_ws then
-        if mon.id == focused_monitor_id then
+        if mon.name == focused_monitor_name then
           focused_entry = { mon = mon, target_ws = target_ws }
         else
           others[#others + 1] = { mon = mon, target_ws = target_ws }
@@ -284,8 +285,6 @@ if hl.on then
       end
     end
 
-    -- Dispatch non-focused monitors first, then the focused monitor last so
-    -- that focus and pointer return to the monitor the user is actively using.
     for i = 1, #others do
       pcall(function()
         hl.dispatch(hl.dsp.focus({ workspace = tostring(others[i].target_ws) }))
@@ -294,6 +293,15 @@ if hl.on then
     if focused_entry then
       pcall(function()
         hl.dispatch(hl.dsp.focus({ workspace = tostring(focused_entry.target_ws) }))
+      end)
+    end
+
+    -- Always refocus the originating monitor after all dispatches so that
+    -- focus and the pointer return to where the user is, even when that monitor
+    -- was already on the target slot and no dispatch was needed for it.
+    if focused_monitor_name then
+      pcall(function()
+        hl.dispatch(hl.dsp.focus({ monitor = focused_monitor_name }))
       end)
     end
   end
