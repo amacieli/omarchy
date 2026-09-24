@@ -55,7 +55,7 @@ if [[ ! -f "$BASES_FILE" ]]; then
   exec hyprctl dispatch "hl.dsp.window.move({ workspace = \"$SLOT\", follow = false })"
 fi
 
-TARGET_WS=$(python3 - "$BASES_FILE" "$FOCUSED_MONITOR" "$SLOT" << 'PYEOF'
+if ! TARGET_WS=$(python3 - "$BASES_FILE" "$FOCUSED_MONITOR" "$SLOT" << 'PYEOF'
 import json, sys
 bases_file, monitor_name, slot = sys.argv[1], sys.argv[2], int(sys.argv[3])
 try:
@@ -68,9 +68,9 @@ try:
 except Exception:
     sys.exit(1)
 PYEOF
-)
-
-if [[ $? -ne 0 || -z "$TARGET_WS" ]]; then
+) || [[ -z "$TARGET_WS" ]]; then
+  # Monitor not yet in the bases map (edge case: new monitor before first sync).
+  # Fall back to moving to the raw slot number so the window is not stranded.
   exec hyprctl dispatch "hl.dsp.window.move({ workspace = \"$SLOT\", follow = false })"
 fi
 
