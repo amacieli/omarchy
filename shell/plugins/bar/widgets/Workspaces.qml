@@ -49,7 +49,17 @@ BarWidget {
 
   function slotOfId(id) {
     if (!root.globalModeActive) return id
-    if (id <= 0 || id > 99) return -1
+    if (id <= 0) return -1
+    // Use the highest known workspace ID as the upper bound rather than a
+    // hardcoded 99. A tenth distinct monitor name gets base 90, pushing IDs
+    // above 99. Math.max(99, maxKnownId) keeps the bound correct and never
+    // tighter than the original hardcoded value.
+    var values = Hyprland.workspaces.values
+    var maxKnownId = 99
+    for (var i = 0; i < values.length; i++) {
+      if (values[i].id > maxKnownId) maxKnownId = values[i].id
+    }
+    if (id > maxKnownId) return -1
     return ((id - 1) % 10) + 1
   }
 

@@ -1,6 +1,7 @@
 #!/bin/bash
 # omarchy:summary=Move focused window to slot N on the focused monitor (global mode)
 # omarchy:args=<slot-number>
+# omarchy:hidden=true
 #
 # Always targets the FOCUSED monitor (keyboard focus), not the window's current
 # monitor. SUPER+SHIFT+N moves the active window to slot N on whichever monitor

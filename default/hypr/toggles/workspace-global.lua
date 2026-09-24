@@ -226,10 +226,23 @@ end
 -- so each pass strictly reduces mismatches and converges in one round.
 
 if hl.on then
+  -- Compute the upper bound for valid workspace IDs dynamically from the bases
+  -- map. The hardcoded 99 breaks when a tenth distinct monitor name is seen
+  -- (e.g. repeated HEADLESS-n names), because the allocator never caps bases
+  -- and the tenth monitor gets base 90, pushing some IDs above 99. Using
+  -- max_base + 10 (minimum 99) keeps the bound correct regardless of count.
+  local ws_id_upper_bound = 99
+  if _G.omarchy_monitor_bases then
+    for _, base in pairs(_G.omarchy_monitor_bases) do
+      local top = base + 10
+      if top > ws_id_upper_bound then ws_id_upper_bound = top end
+    end
+  end
+
   local function slot_of(ws_id)
     -- Extract slot 1-10 from any workspace ID within the global range.
     -- Returns nil for special/named/out-of-range IDs.
-    if ws_id <= 0 or ws_id > 99 then return nil end
+    if ws_id <= 0 or ws_id > ws_id_upper_bound then return nil end
     local slot = ws_id % 10
     if slot == 0 then slot = 10 end
     return slot

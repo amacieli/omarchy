@@ -115,10 +115,14 @@ cmd="${1:-}"
 
 case "$cmd" in
   sync)
-    # Enumerate currently connected monitors via hyprctl
-    if ! command -v hyprctl &>/dev/null; then
-      echo "omarchy-monitor-base: hyprctl not found" >&2
-      exit 1
+    # Enumerate currently connected monitors via hyprctl.
+    # If hyprctl is absent or fails (e.g. outside a session, or compositor
+    # not yet ready), fall back to printing the persisted bases so callers
+    # always get a usable output rather than a hard failure.
+    if omarchy-cmd-missing hyprctl; then
+      # hyprctl not available — degrade gracefully to persisted data.
+      read_bases
+      exit 0
     fi
     monitor_names=$(hyprctl monitors -j 2>/dev/null | python3 -c "
 import json, sys
@@ -127,8 +131,10 @@ for m in monitors:
     print(m['name'])
 " 2>/dev/null)
     if [[ -z "$monitor_names" ]]; then
-      echo "omarchy-monitor-base: no monitors returned by hyprctl" >&2
-      exit 1
+      # hyprctl returned nothing (compositor starting up, no monitors yet,
+      # or session not fully ready) — degrade gracefully to persisted data.
+      read_bases
+      exit 0
     fi
     # Allocate bases and print results
     # shellcheck disable=SC2086
