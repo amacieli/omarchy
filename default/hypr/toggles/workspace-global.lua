@@ -240,22 +240,48 @@ if hl.on then
     if not monitors then return end
 
     -- Build a set of current active workspaces keyed by monitor id.
+    -- Also record which monitor currently has focus so we can dispatch it last:
+    -- hl.dsp.focus() warps keyboard focus and the pointer to the workspace's
+    -- owner monitor, so whichever monitor is dispatched last wins. Dispatching
+    -- the originating monitor last ensures focus stays where the user is.
     local active_ws = {}
+    local focused_monitor_id = nil
     for i = 1, #monitors do
-      if monitors[i].active_workspace then
-        active_ws[monitors[i].id] = monitors[i].active_workspace.id
+      local m = monitors[i]
+      if m.active_workspace then
+        active_ws[m.id] = m.active_workspace.id
+      end
+      if m.focused then
+        focused_monitor_id = m.id
       end
     end
 
-    -- Dispatch only to monitors that are showing the wrong slot.
+    -- Partition: non-focused monitors that need syncing first, focused last.
+    local others = {}
+    local focused_entry = nil
     for i = 1, #_G.omarchy_global_ws_monitors do
       local mon = _G.omarchy_global_ws_monitors[i]
       local target_ws = mon.base + slot
       if active_ws[mon.id] ~= target_ws then
-        pcall(function()
-          hl.dispatch(hl.dsp.focus({ workspace = tostring(target_ws) }))
-        end)
+        if mon.id == focused_monitor_id then
+          focused_entry = { mon = mon, target_ws = target_ws }
+        else
+          others[#others + 1] = { mon = mon, target_ws = target_ws }
+        end
       end
+    end
+
+    -- Dispatch non-focused monitors first, then the focused monitor last so
+    -- that focus and pointer return to the monitor the user is actively using.
+    for i = 1, #others do
+      pcall(function()
+        hl.dispatch(hl.dsp.focus({ workspace = tostring(others[i].target_ws) }))
+      end)
+    end
+    if focused_entry then
+      pcall(function()
+        hl.dispatch(hl.dsp.focus({ workspace = tostring(focused_entry.target_ws) }))
+      end)
     end
   end
 

@@ -12,6 +12,9 @@
 #   hyprctl dispatch hl.dsp.focus({ workspace = "<base+N>" })
 # for each monitor's workspace (base+N), switching all monitors simultaneously.
 #
+# The focused monitor is always dispatched LAST so that keyboard focus and the
+# pointer remain on the monitor the user is actively using after the switch.
+#
 # This is called by omarchy-switch-to-aw when workspace-global.lua flag is active.
 # The event hook in workspace-global.lua will then confirm all monitors are synced.
 
@@ -29,11 +32,23 @@ if [[ ! -f "$BASES_FILE" ]]; then
   exec hyprctl dispatch "hl.dsp.focus({ workspace = \"$SLOT\" })"
 fi
 
-# Read all monitor bases and dispatch each monitor to its slot
-python3 - "$BASES_FILE" "$SLOT" <<'PYEOF'
+# Identify the currently focused monitor so we can dispatch it last.
+# hyprctl activeworkspace -j reports the workspace on the focused monitor.
+FOCUSED_MONITOR=$(hyprctl activeworkspace -j 2>/dev/null | python3 -c "
+import json, sys
+try:
+    ws = json.load(sys.stdin)
+    print(ws.get('monitor', ''))
+except Exception:
+    print('')
+" 2>/dev/null)
+
+# Read all monitor bases and dispatch each monitor to its slot,
+# saving the focused monitor for last to preserve focus and pointer position.
+python3 - "$BASES_FILE" "$SLOT" "$FOCUSED_MONITOR" <<'PYEOF'
 import json, sys, subprocess
 
-bases_file, slot = sys.argv[1], int(sys.argv[2])
+bases_file, slot, focused_monitor = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 
 with open(bases_file) as f:
     bases = json.load(f)
@@ -43,9 +58,14 @@ if not bases:
     subprocess.run(["hyprctl", "dispatch", f'hl.dsp.focus({{ workspace = "{slot}" }})'])
     sys.exit(0)
 
-# Dispatch focus to slot N on every known monitor
+# Sort all monitors by base (ascending), but move the focused monitor to the end
+# so that keyboard focus and the pointer land back on the user's active monitor.
+def sort_key(item):
+    name, base = item
+    return (1 if name == focused_monitor else 0, base)
+
 errors = 0
-for name, base in sorted(bases.items(), key=lambda x: x[1]):
+for name, base in sorted(bases.items(), key=sort_key):
     target_ws = base + slot
     result = subprocess.run(
         ["hyprctl", "dispatch", f'hl.dsp.focus({{ workspace = "{target_ws}" }})'],
