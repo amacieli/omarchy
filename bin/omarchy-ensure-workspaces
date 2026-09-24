@@ -1,5 +1,6 @@
 #!/bin/bash
-# omarchy-ensure-workspaces
+# omarchy:summary=Ensure persistent workspaces exist on all monitors (with retry)
+# omarchy:hidden=true
 #
 # Delayed verification helper: confirm that all workspace slots (1-30) exist
 # as persistent workspaces after global workspace mode initializes.

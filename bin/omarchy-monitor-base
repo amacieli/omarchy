@@ -1,4 +1,6 @@
 #!/bin/bash
+# omarchy:summary=Manage stable monitor→workspace base assignments
+# omarchy:hidden=true
 # omarchy-monitor-base <command> [args]
 #
 # Manage stable name-keyed monitor workspace bases.
@@ -67,12 +69,15 @@ PYEOF
 }
 
 allocate_bases() {
-  # Given a list of monitor names on stdin, return a full name→base mapping
+  # Given a list of monitor names as arguments, return a full name→base mapping
   # with new bases allocated for any names not yet in the file.
-  python3 - "$BASES_FILE" <<'PYEOF'
+  # Usage: allocate_bases name1 name2 ...
+  python3 - "$BASES_FILE" "$@" << 'PYEOF'
 import json, sys, os
 
 bases_file = sys.argv[1]
+names = sys.argv[2:]  # monitor names passed as arguments, not stdin
+
 existing = {}
 if os.path.exists(bases_file):
     try:
@@ -81,7 +86,6 @@ if os.path.exists(bases_file):
     except Exception:
         existing = {}
 
-names = [line.strip() for line in sys.stdin if line.strip()]
 used_bases = set(existing.values())
 
 # Allocate bases for new monitors: find next free multiple of 10
@@ -127,7 +131,8 @@ for m in monitors:
       exit 1
     fi
     # Allocate bases and print results
-    echo "$monitor_names" | allocate_bases
+    # shellcheck disable=SC2086
+    allocate_bases $monitor_names
     ;;
 
   get)

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Hyprland
+import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
@@ -10,20 +11,33 @@ BarWidget {
   moduleName: "omarchy.workspaces"
 
   // ── Global-mode detection ─────────────────────────────────────────────────
-  // The toggle flag file is present when workspace-global.lua is active.
-  // FileView.exists() is a reactive property: it re-evaluates when the file
-  // appears or disappears, so toggling global mode live updates the bar.
-  readonly property string globalFlagPath: StandardPaths.writableLocation(
-    StandardPaths.HomeLocation) + "/.local/state/omarchy/toggles/hypr/workspace-global.lua"
+  // Probe for the toggle flag file with a Process (bash test), re-triggered
+  // whenever the toggles directory changes. This is the same pattern Bar.qml
+  // uses for windowNoGapsToggle — it avoids StandardPaths (QtCore, not
+  // imported) and FileView.exists (not a Quickshell property).
 
-  FileView {
-    id: globalFlagView
-    path: root.globalFlagPath
-    // We only need existence, not content; disable auto-read to save I/O.
-    preload: false
+  readonly property string globalToggleDir:
+    (Quickshell.env("HOME") || "") + "/.local/state/omarchy/toggles/hypr"
+
+  property bool globalModeActive: false
+
+  Process {
+    id: globalFlagProbe
+    running: true
+    command: ["bash", "-c",
+      "[[ -f $HOME/.local/state/omarchy/toggles/hypr/workspace-global.lua ]] && echo yes || echo no"]
+    stdout: SplitParser {
+      onRead: function(line) { root.globalModeActive = String(line).trim() === "yes" }
+    }
   }
 
-  readonly property bool globalModeActive: globalFlagView.exists
+  // Re-probe whenever the toggles directory is created, deleted, or modified.
+  FileView {
+    path: root.globalToggleDir
+    watchChanges: true
+    printErrors: false
+    onFileChanged: globalFlagProbe.running = true
+  }
 
   // ── Slot/ID mapping helpers ───────────────────────────────────────────────
   // In local mode (globalModeActive == false):

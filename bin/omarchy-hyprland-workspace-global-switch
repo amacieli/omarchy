@@ -1,5 +1,7 @@
 #!/bin/bash
-# omarchy-hyprland-workspace-global-switch <slot 1-10>
+# omarchy:summary=Switch all monitors to the same workspace slot (global mode)
+# omarchy:args=<slot-number>
+# omarchy:hidden=true
 #
 # Switch ALL connected monitors to the given slot in global workspace mode.
 #
