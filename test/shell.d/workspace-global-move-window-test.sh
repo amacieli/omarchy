@@ -104,7 +104,7 @@ log=$(cat "$DISPATCH_LOG" 2>/dev/null || true)
 # eDP-1 base=0, slot=3 → workspace 3
 [[ "$log" == *'workspace = "3"'* && "$log" == *'follow = false'* ]] ||
   fail "monitor in map moves window to base+slot" "got: $log"
-pass "monitor in bases map: moves window to base+slot with follow=false"
+pass "monitor in bases map: moves window to base+slot with follow=false (silent dispatch)"
 
 # ── Issue D: monitor NOT in map → fallback reachable under set -euo pipefail ──
 # HDMI-A-1 is focused but has no entry in the bases file.
